@@ -53,6 +53,7 @@
 ### ☁️ Cloud & Infrastructure
 ![Google Cloud](https://img.shields.io/badge/Google_Cloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-039BE5.svg?style=for-the-badge&logo=firebase&logoColor=white)
+![Huawei Cloud](https://img.shields.io/badge/Huawei_Cloud-FF0000.svg?style=for-the-badge&logo=huawei&logoColor=white)
 
 ### 🛡️ Cybersecurity
 ![ISC2 CC](https://img.shields.io/badge/ISC2%20CC-00A4E4.svg?style=for-the-badge&logo=isc2&logoColor=white)
