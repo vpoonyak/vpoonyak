@@ -36,7 +36,7 @@
 ### 📊 Data Analysis & Processing
 ![NumPy](https://img.shields.io/badge/NumPy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
-![OpenCV](https://img.shields.io/badge/OpenCV-white.svg?style=for-the-badge&logo=opencv&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-%235C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white)
 ![jamovi](https://img.shields.io/badge/jamovi-215082.svg?style=for-the-badge&logo=jamovi&logoColor=white)
 
 ### 🌍 Geospatial Analysis
@@ -60,6 +60,7 @@
 ![Google Cybersecurity](https://img.shields.io/badge/Google%20Cybersecurity-4285F4.svg?style=for-the-badge&logo=google&logoColor=white)
 
 ### 🛠 Environments & Tools
+![Colab](https://img.shields.io/badge/Colab-F9AB00.svg?style=for-the-badge&logo=googlecolab&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter-%23F37626.svg?style=for-the-badge&logo=jupyter&logoColor=white)
 ![Anaconda](https://img.shields.io/badge/Anaconda-%2344A833.svg?style=for-the-badge&logo=anaconda&logoColor=white)
 
