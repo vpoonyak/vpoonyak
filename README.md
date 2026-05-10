@@ -2,7 +2,7 @@
 
 > **MD & Travel Medicine Resident | M.Sc. Digital and AI Technologies in Health Systems**
 
-![Profile Views](https://hits.dwyl.com/vk-poonyakanok/vk-poonyakanok.svg?style=flat-square&color=0056b3)
+![Profile Views](https://komarev.com/ghpvc/?username=vk-poonyakanok&label=Profile%20Views&style=flat-square&color=0056b3)
 
 ## 👨‍⚕️ About Me
 - **Incoming M.Sc. Student** in Health Care Analytics and Information Technology (MSHCA) at Carnegie Mellon University (Heinz College), Pittsburgh, PA, USA (Starting Aug 2026).
