@@ -11,7 +11,7 @@ I'm a physician and clinical data analyst in Thailand working across travel medi
 - Incoming M.S. Health Care Analytics and Information Technology student, Carnegie Mellon University Heinz College
 - Focus: clinical decision support, vaccine registries, surveillance systems, and deployable health tools
 
-## Tech I Use
+## Core Toolkit
 
 **Languages & data**  
 ![Python](https://img.shields.io/badge/Python-3670A0.svg?style=for-the-badge&logo=python&logoColor=white) ![R](https://img.shields.io/badge/R-%23276DC3.svg?style=for-the-badge&logo=r&logoColor=white) ![SQL](https://img.shields.io/badge/SQL-%2300758F.svg?style=for-the-badge&logo=postgresql&logoColor=white)
