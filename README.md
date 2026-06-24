@@ -14,10 +14,10 @@ I'm a physician and clinical data analyst in Thailand working across travel medi
 ## Tech I Use
 
 **Languages & data**  
-![Python](https://img.shields.io/badge/Python-3670A0.svg?style=for-the-badge&logo=python&logoColor=ffdd54) ![R](https://img.shields.io/badge/R-%23276DC3.svg?style=for-the-badge&logo=r&logoColor=white) ![SQL](https://img.shields.io/badge/SQL-%2300758F.svg?style=for-the-badge&logo=postgresql&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3670A0.svg?style=for-the-badge&logo=python&logoColor=white) ![R](https://img.shields.io/badge/R-%23276DC3.svg?style=for-the-badge&logo=r&logoColor=white) ![SQL](https://img.shields.io/badge/SQL-%2300758F.svg?style=for-the-badge&logo=postgresql&logoColor=white)
 
 **Machine learning**  
-![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-%23F7931E.svg?style=for-the-badge&logo=scikit-learn&logoColor=white) ![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=pytorch&logoColor=white) ![YOLO](https://img.shields.io/badge/YOLO-00FFFF.svg?style=for-the-badge&logo=ultralytics&logoColor=black) ![AutoGluon](assets/autogluon-badge.svg)
+![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-%23F7931E.svg?style=for-the-badge&logo=scikit-learn&logoColor=white) ![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=pytorch&logoColor=white) ![YOLO](https://img.shields.io/badge/YOLO-00FFFF.svg?style=for-the-badge&logo=ultralytics&logoColor=white) ![AutoGluon](assets/autogluon-badge.svg)
 
 **GIS & visualization**  
 ![QGIS](https://img.shields.io/badge/QGIS-589632.svg?style=for-the-badge&logo=qgis&logoColor=white) ![Tableau](assets/tableau-badge.svg)
