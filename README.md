@@ -8,7 +8,7 @@ I'm a physician and clinical data analyst in Thailand working across travel medi
 
 - Travel Medicine Resident, Institute of Preventive Medicine, Department of Disease Control, Ministry of Public Health, Thailand
 - M.S. Digital and AI Technologies in Health Systems, Chulalongkorn University
-- Incoming M.S. Health Care Analytics and Information Technology student, Carnegie Mellon University Heinz College
+- M.S. Health Care Analytics and Information Technology student, Carnegie Mellon University Heinz College
 - Focus: clinical decision support, vaccine registries, surveillance systems, and deployable health tools
 
 ## Core Toolkit
