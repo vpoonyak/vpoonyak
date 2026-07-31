@@ -27,8 +27,8 @@ I'm a physician and clinical data analyst in Thailand working across travel medi
 
 ## GitHub
 
-![Vitchakorn Poonyakanok's GitHub stats](https://github-readme-stats.vercel.app/api?username=vpoonyak&show_icons=true&theme=tokyonight&hide_border=true)
-![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=vpoonyak&layout=compact&theme=tokyonight&hide_border=true)
+![Vitchakorn Poonyakanok's GitHub stats](assets/github-stats.svg)
+![Top Languages](assets/top-langs.svg)
 
 ## Connect
 
