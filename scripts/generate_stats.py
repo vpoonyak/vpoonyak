@@ -16,11 +16,18 @@ from xml.sax.saxutils import escape
 LOGIN = os.environ.get("GH_STATS_LOGIN", "vpoonyak")
 NAVY = "#0b1f3a"
 ACCENT = "#0056b3"
-LABEL_COLOR = "#c7d3e3"
-VALUE_COLOR = "#6fb1ff"
+LABEL_COLOR = "#a9bcd4"
+VALUE_COLOR = "#ffffff"
+STREAK_COLOR = "#6fb1ff"
+HAIRLINE = "#17345a"
 FONT = "Verdana,Geneva,DejaVu Sans,sans-serif"
 CARD_HEIGHT = 195
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
+
+# Fixed categorical palette validated for CVD separation and 3:1 contrast on the
+# navy surface (dataviz six-checks validator); assigned to languages by rank so
+# adjacent bar segments always differ, unlike GitHub's language colors.
+PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300"]
 
 QUERY = """
 query($login: String!, $after: String) {
@@ -33,10 +40,6 @@ query($login: String!, $after: String) {
     }
     pullRequests { totalCount }
     issues { totalCount }
-    repositoriesContributedTo(
-      includeUserRepositories: false
-      contributionTypes: [COMMIT, PULL_REQUEST, ISSUE, REPOSITORY]
-    ) { totalCount }
     repositories(first: 100, after: $after, ownerAffiliations: OWNER, isFork: false) {
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -78,14 +81,11 @@ def fetch_stats(token: str) -> dict:
         repos.extend(nxt["repositories"]["nodes"])
         page = nxt["repositories"]["pageInfo"]
 
-    languages: dict[str, dict] = {}
+    languages: dict[str, int] = {}
     for repo in repos:
         for edge in repo["languages"]["edges"]:
             name = edge["node"]["name"]
-            entry = languages.setdefault(
-                name, {"size": 0, "color": edge["node"]["color"] or "#8b949e"}
-            )
-            entry["size"] += edge["size"]
+            languages[name] = languages.get(name, 0) + edge["size"]
 
     days = [
         d
@@ -108,7 +108,7 @@ def fetch_stats(token: str) -> dict:
         "commits": user["contributionsCollection"]["totalCommitContributions"],
         "prs": user["pullRequests"]["totalCount"],
         "issues": user["issues"]["totalCount"],
-        "contributed_to": user["repositoriesContributedTo"]["totalCount"],
+        "repos": len(repos),
         "streak": streak,
         "languages": languages,
     }
@@ -136,46 +136,56 @@ def card(width: int, title: str, body: str) -> str:
 
 def render_stats_card(stats: dict) -> str:
     rows = [
-        ("Stars", fmt(stats["stars"])),
-        ("Commits (past year)", fmt(stats["commits"])),
-        ("Pull requests", fmt(stats["prs"])),
-        ("Issues", fmt(stats["issues"])),
-        ("Contributed to", fmt(stats["contributed_to"])),
-        ("Current streak", f"{stats['streak']} day" + ("" if stats["streak"] == 1 else "s")),
+        ("Stars", fmt(stats["stars"]), VALUE_COLOR),
+        ("Commits (past year)", fmt(stats["commits"]), VALUE_COLOR),
+        ("Pull requests", fmt(stats["prs"]), VALUE_COLOR),
+        ("Issues", fmt(stats["issues"]), VALUE_COLOR),
+        ("Public repositories", fmt(stats["repos"]), VALUE_COLOR),
+        (
+            "Current streak",
+            f"{stats['streak']} day" + ("" if stats["streak"] == 1 else "s"),
+            STREAK_COLOR,
+        ),
     ]
     body = ""
-    for i, (label, value) in enumerate(rows):
+    for i, (label, value, color) in enumerate(rows):
         y = 80 + i * 20
         body += (
             f'<text x="24" y="{y}" font-size="12" fill="{LABEL_COLOR}">{escape(label)}</text>'
-            f'<text x="426" y="{y}" font-size="12" font-weight="bold" fill="{VALUE_COLOR}" '
+            f'<text x="426" y="{y}" font-size="12" font-weight="bold" fill="{color}" '
             f'text-anchor="end">{escape(value)}</text>'
         )
+        if i < len(rows) - 1:
+            body += (
+                f'<rect x="24" y="{y + 7}" width="402" height="1" fill="{HAIRLINE}" '
+                f'shape-rendering="crispEdges"/>'
+            )
     return card(450, f"{LOGIN} - GitHub stats", body)
 
 
 def render_langs_card(languages: dict) -> str:
-    total = sum(lang["size"] for lang in languages.values()) or 1
-    top = sorted(languages.items(), key=lambda kv: kv[1]["size"], reverse=True)[:6]
-    top_total = sum(lang["size"] for _, lang in top) or 1
+    total = sum(languages.values()) or 1
+    top = sorted(languages.items(), key=lambda kv: kv[1], reverse=True)[: len(PALETTE)]
+    top_total = sum(size for _, size in top) or 1
 
-    bar_x, bar_width, body = 24, 252, ""
-    x = bar_x
-    for i, (_, lang) in enumerate(top):
-        w = round(bar_width * lang["size"] / top_total)
+    bar_x, bar_width, gap = 24, 252, 2
+    drawable = bar_width - gap * (len(top) - 1)
+    body, x = "", bar_x
+    for i, (_, size) in enumerate(top):
+        w = max(3, round(drawable * size / top_total))
         if i == len(top) - 1:
-            w = bar_x + bar_width - x  # absorb rounding drift
+            w = max(3, bar_x + bar_width - x)  # absorb rounding drift
         body += (
-            f'<rect x="{x}" y="64" width="{w}" height="10" fill="{lang["color"]}" '
+            f'<rect x="{x}" y="64" width="{w}" height="10" fill="{PALETTE[i]}" '
             f'shape-rendering="crispEdges"/>'
         )
-        x += w
+        x += w + gap
 
-    for i, (name, lang) in enumerate(top):
+    for i, (name, size) in enumerate(top):
         y = 98 + i * 16
-        pct = 100 * lang["size"] / total
+        pct = 100 * size / total
         body += (
-            f'<rect x="24" y="{y - 9}" width="9" height="9" fill="{lang["color"]}" '
+            f'<rect x="24" y="{y - 9}" width="9" height="9" fill="{PALETTE[i]}" '
             f'shape-rendering="crispEdges"/>'
             f'<text x="39" y="{y}" font-size="11" fill="{LABEL_COLOR}">{escape(name)}</text>'
             f'<text x="276" y="{y}" font-size="11" font-weight="bold" fill="{VALUE_COLOR}" '
