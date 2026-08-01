@@ -156,10 +156,14 @@ def render_vitals_card(stats: dict) -> str:
         x = px0 + (px1 - px0) * i / (n - 1)
         y = py1 - (py1 - py0 - 8) * c / vmax
         pts.append((round(x, 1), round(y, 1)))
+    points = " ".join(f"{x},{y}" for x, y in pts)
     plot += (
-        f'<polyline class="trace" points="{" ".join(f"{x},{y}" for x, y in pts)}" '
-        f'fill="none" stroke="{TRACE_COLOR}" stroke-width="2" stroke-linejoin="round" '
-        f'stroke-linecap="round" pathLength="1000"/>'
+        f'<polyline points="{points}" fill="none" stroke="{TRACE_COLOR}" '
+        f'stroke-opacity="0.35" stroke-width="2" stroke-linejoin="round" '
+        f'stroke-linecap="round"/>'
+        f'<polyline class="sweep" points="{points}" fill="none" stroke="{TRACE_COLOR}" '
+        f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round" '
+        f'pathLength="1000"/>'
     )
 
     if max(counts, default=0) > 0:
@@ -224,9 +228,9 @@ def render_vitals_card(stats: dict) -> str:
         f'viewBox="0 0 {W} {H}" role="img" aria-label="{LOGIN} GitHub vitals">'
         f"<title>{LOGIN} — GitHub vitals</title>"
         f"<style>@media (prefers-reduced-motion: no-preference){{"
-        f".trace{{stroke-dasharray:1000;stroke-dashoffset:1000;"
-        f"animation:ecg 2.4s ease-out 0.3s forwards;}}}}"
-        f"@keyframes ecg{{to{{stroke-dashoffset:0;}}}}</style>"
+        f".sweep{{stroke-dasharray:200 800;stroke-dashoffset:200;"
+        f"animation:ecg 6s linear infinite;}}}}"
+        f"@keyframes ecg{{to{{stroke-dashoffset:-800;}}}}</style>"
         f'<g shape-rendering="crispEdges">'
         f'<rect width="{W}" height="{H}" fill="{NAVY}"/>'
         f'<rect x="24" y="48" width="36" height="3" fill="{ACCENT}"/>'
