@@ -87,10 +87,12 @@ def fetch_stats(token: str) -> dict:
         page = nxt["repositories"]["pageInfo"]
 
     languages: dict[str, int] = {}
+    lang_repos: dict[str, int] = {}
     for repo in repos:
         for edge in repo["languages"]["edges"]:
             name = edge["node"]["name"]
             languages[name] = languages.get(name, 0) + edge["size"]
+            lang_repos[name] = lang_repos.get(name, 0) + 1
 
     weeks = user["contributionsCollection"]["contributionCalendar"]["weeks"]
     days = [
@@ -121,6 +123,7 @@ def fetch_stats(token: str) -> dict:
         "repos": len(repos),
         "streak": streak,
         "languages": languages,
+        "lang_repos": lang_repos,
         "daily": [(d["date"], d["contributionCount"]) for d in days[-90:]],
         "weekly": weekly,
     }
@@ -249,8 +252,9 @@ def render_vitals_card(stats: dict) -> str:
 OTHER_COLOR = "#3d5a7e"
 
 
-def render_langs_card(languages: dict) -> str:
+def render_langs_card(stats: dict) -> str:
     W, H = 750, 220
+    languages = stats["languages"]
     total = sum(languages.values()) or 1
     top = sorted(languages.items(), key=lambda kv: kv[1], reverse=True)[: len(PALETTE)]
 
@@ -283,19 +287,65 @@ def render_langs_card(languages: dict) -> str:
             )
             k += 1
 
-    # Legend: two columns, percentage right-aligned per column
-    cols = [(190, 430), (470, 726)]
-    per_col = (len(entries) + 1) // 2
-    for i, (name, pct, color) in enumerate(entries):
-        cx, cpct = cols[i // per_col]
-        y = 88 + (i % per_col) * 30
-        ink = MUTED if name == "Other" else LABEL_COLOR
+    # "Other" share is only in the waffle; identify its gray cells below the grid
+    if len(entries) > len(top):
         body += (
-            f'<rect x="{cx}" y="{y - 10}" width="10" height="10" fill="{color}" '
+            f'<rect x="{wx}" y="206" width="7" height="7" fill="{OTHER_COLOR}" '
             f'shape-rendering="crispEdges"/>'
-            f'<text x="{cx + 17}" y="{y}" font-size="11" fill="{ink}">{escape(name)}</text>'
-            f'<text x="{cpct}" y="{y}" font-size="12" font-weight="bold" fill="{VALUE_COLOR}" '
-            f'text-anchor="end">{pct:.1f}%</text>'
+            f'<text x="{wx + 12}" y="213" font-size="8" fill="{MUTED}">'
+            f"OTHER {entries[-1][1]:.1f}%</text>"
+        )
+
+    # Dumbbell panel: % of code bytes vs % of repos the language appears in
+    name_x, ax0, ax1 = 190, 330, 600
+    col_bytes, col_repos = 660, 726
+    row_top, row_step = 100, 18
+    rows_bottom = row_top + row_step * (len(top) - 1) + 4
+
+    body += (
+        f'<circle cx="{col_bytes - 40}" cy="79" r="4" fill="{NAVY}" stroke="{MUTED}" '
+        f'stroke-width="2"/>'
+        f'<text x="{col_bytes}" y="82" font-size="8" fill="{MUTED}" text-anchor="end" '
+        f'letter-spacing="1">% BYTES</text>'
+        f'<circle cx="{col_repos - 40}" cy="79" r="4" fill="{MUTED}"/>'
+        f'<text x="{col_repos}" y="82" font-size="8" fill="{MUTED}" text-anchor="end" '
+        f'letter-spacing="1">% REPOS</text>'
+    )
+    for tick in (0, 50, 100):
+        tx = round(ax0 + (ax1 - ax0) * tick / 100)
+        body += (
+            f'<rect x="{tx}" y="92" width="1" height="{rows_bottom - 92}" fill="{GRID}"/>'
+            f'<text x="{tx}" y="{rows_bottom + 13}" font-size="8" fill="{MUTED}" '
+            f'text-anchor="middle">{tick}%</text>'
+        )
+
+    total_repos = stats["repos"] or 1
+    for i, (name, pct, color) in enumerate(entries[: len(top)]):
+        y = row_top + i * row_step
+        cy = y - 4
+        rpct = 100 * stats["lang_repos"].get(name, 0) / total_repos
+        bx = ax0 + (ax1 - ax0) * pct / 100
+        rx = ax0 + (ax1 - ax0) * rpct / 100
+        body += (
+            f'<rect x="{name_x}" y="{y - 10}" width="10" height="10" fill="{color}" '
+            f'shape-rendering="crispEdges"/>'
+            f'<text x="{name_x + 17}" y="{y}" font-size="11" fill="{LABEL_COLOR}">'
+            f"{escape(name)}</text>"
+        )
+        if abs(rx - bx) > 10:
+            body += (
+                f'<line x1="{bx:.1f}" y1="{cy}" x2="{rx:.1f}" y2="{cy}" '
+                f'stroke="{color}" stroke-width="2" stroke-opacity="0.45"/>'
+            )
+        body += (
+            f'<circle cx="{bx:.1f}" cy="{cy}" r="4.5" fill="{NAVY}" stroke="{color}" '
+            f'stroke-width="2"/>'
+            f'<circle cx="{rx:.1f}" cy="{cy}" r="4.5" fill="{color}" stroke="{NAVY}" '
+            f'stroke-width="1.5"/>'
+            f'<text x="{col_bytes}" y="{y}" font-size="10" font-weight="bold" '
+            f'fill="{VALUE_COLOR}" text-anchor="end">{pct:.1f}</text>'
+            f'<text x="{col_repos}" y="{y}" font-size="10" font-weight="bold" '
+            f'fill="{VALUE_COLOR}" text-anchor="end">{rpct:.0f}</text>'
         )
 
     return (
@@ -310,7 +360,7 @@ def render_langs_card(languages: dict) -> str:
         f'<text x="24" y="38" font-size="14" font-weight="bold" fill="{VALUE_COLOR}" '
         f'letter-spacing="1">TOP LANGUAGES</text>'
         f'<text x="726" y="38" font-size="9" fill="{MUTED}" text-anchor="end" '
-        f'letter-spacing="1">BY CODE BYTES · PUBLIC REPOS</text>'
+        f'letter-spacing="1">BYTES VS REPO BREADTH · PUBLIC</text>'
         f'<text x="24" y="64" font-size="9" fill="{MUTED}" letter-spacing="1">'
         f"SHARE OF CODE — 1 CELL = 1%</text>"
         f"{body}</g></svg>\n"
@@ -345,7 +395,7 @@ def main() -> None:
         sys.exit("Set GH_STATS_TOKEN or GITHUB_TOKEN")
     stats = fetch_stats(token)
     (ASSETS / "github-stats.svg").write_text(render_vitals_card(stats))
-    (ASSETS / "top-langs.svg").write_text(render_langs_card(stats["languages"]))
+    (ASSETS / "top-langs.svg").write_text(render_langs_card(stats))
     append_history(stats)
     print(f"Wrote cards and history for {LOGIN}: "
           f"{ {k: v for k, v in stats.items() if k not in ('languages', 'daily', 'weekly')} }")
