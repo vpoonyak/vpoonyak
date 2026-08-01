@@ -27,7 +27,8 @@ I'm a physician and clinical data analyst in Thailand working across travel medi
 
 ## GitHub
 
-![Vitchakorn Poonyakanok's GitHub stats](assets/github-stats.svg)
+![Vitchakorn Poonyakanok's GitHub vitals](assets/github-stats.svg)
+
 ![Top Languages](assets/top-langs.svg)
 
 ## Connect

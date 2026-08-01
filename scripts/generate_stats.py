@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Generate the profile README stat cards (assets/github-stats.svg, assets/top-langs.svg).
 
-Fetches stats from the GitHub GraphQL API and renders flat navy SVG cards
-matching the hand-made badges in assets/. Stdlib only.
+Fetches stats from the GitHub GraphQL API and renders a "GitHub vitals"
+monitor card (ECG-style contribution trace + lab-panel stats) and a top
+languages card, both in the flat navy style of the hand-made badges in
+assets/. Also appends a daily snapshot to data/*.csv for future trend
+charts. Stdlib only.
 """
 
 import json
 import os
 import sys
 import urllib.request
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -17,12 +20,14 @@ LOGIN = os.environ.get("GH_STATS_LOGIN", "vpoonyak")
 NAVY = "#0b1f3a"
 ACCENT = "#0056b3"
 LABEL_COLOR = "#a9bcd4"
+MUTED = "#7d93b3"
 VALUE_COLOR = "#ffffff"
-STREAK_COLOR = "#6fb1ff"
+TRACE_COLOR = "#6fb1ff"
 HAIRLINE = "#17345a"
+GRID = "#122a4d"
 FONT = "Verdana,Geneva,DejaVu Sans,sans-serif"
-CARD_HEIGHT = 195
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
+DATA = Path(__file__).resolve().parent.parent / "data"
 
 # Fixed categorical palette validated for CVD separation and 3:1 contrast on the
 # navy surface (dataviz six-checks validator); assigned to languages by rank so
@@ -87,9 +92,10 @@ def fetch_stats(token: str) -> dict:
             name = edge["node"]["name"]
             languages[name] = languages.get(name, 0) + edge["size"]
 
+    weeks = user["contributionsCollection"]["contributionCalendar"]["weeks"]
     days = [
         d
-        for week in user["contributionsCollection"]["contributionCalendar"]["weeks"]
+        for week in weeks
         for d in week["contributionDays"]
         if date.fromisoformat(d["date"]) <= date.today()
     ]
@@ -103,6 +109,10 @@ def fetch_stats(token: str) -> dict:
         else:
             break
 
+    weekly = [
+        sum(d["contributionCount"] for d in w["contributionDays"]) for w in weeks
+    ]
+
     return {
         "stars": sum(r["stargazerCount"] for r in repos),
         "commits": user["contributionsCollection"]["totalCommitContributions"],
@@ -111,6 +121,8 @@ def fetch_stats(token: str) -> dict:
         "repos": len(repos),
         "streak": streak,
         "languages": languages,
+        "daily": [(d["date"], d["contributionCount"]) for d in days[-90:]],
+        "weekly": weekly,
     }
 
 
@@ -118,49 +130,116 @@ def fmt(value: int) -> str:
     return f"{value / 1000:.1f}k" if value >= 1000 else str(value)
 
 
-def card(width: int, title: str, body: str) -> str:
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{CARD_HEIGHT}" '
-        f'viewBox="0 0 {width} {CARD_HEIGHT}" role="img" aria-label="{escape(title)}">'
-        f"<title>{escape(title)}</title>"
-        f'<g shape-rendering="crispEdges">'
-        f'<rect width="{width}" height="{CARD_HEIGHT}" fill="{NAVY}"/>'
-        f'<rect x="24" y="50" width="36" height="3" fill="{ACCENT}"/>'
-        f"</g>"
-        f'<g font-family="{FONT}" text-rendering="geometricPrecision">'
-        f'<text x="24" y="40" font-size="14" font-weight="bold" fill="#ffffff" '
-        f'letter-spacing="1">{escape(title.upper())}</text>'
-        f"{body}</g></svg>\n"
+def render_vitals_card(stats: dict) -> str:
+    W, H = 750, 220
+    px0, px1, py0, py1 = 24, 452, 72, 184
+    rx0, rx1 = 492, 726
+
+    daily = stats["daily"]
+    counts = [c for _, c in daily]
+    vmax = max(counts + [1])
+    n = max(len(daily), 2)
+
+    # ECG grid (recessive, monitor-style)
+    plot = ""
+    for frac in (1 / 3, 2 / 3):
+        gy = round(py0 + (py1 - py0) * frac)
+        plot += f'<rect x="{px0}" y="{gy}" width="{px1 - px0}" height="1" fill="{GRID}"/>'
+    for i in range(15, len(daily), 15):
+        gx = round(px0 + (px1 - px0) * i / (n - 1))
+        plot += f'<rect x="{gx}" y="{py0}" width="1" height="{py1 - py0}" fill="{GRID}"/>'
+    plot += f'<rect x="{px0}" y="{py1}" width="{px1 - px0}" height="1" fill="{HAIRLINE}"/>'
+
+    # Contribution trace
+    pts = []
+    for i, (_, c) in enumerate(daily):
+        x = px0 + (px1 - px0) * i / (n - 1)
+        y = py1 - (py1 - py0 - 8) * c / vmax
+        pts.append((round(x, 1), round(y, 1)))
+    plot += (
+        f'<polyline class="trace" points="{" ".join(f"{x},{y}" for x, y in pts)}" '
+        f'fill="none" stroke="{TRACE_COLOR}" stroke-width="2" stroke-linejoin="round" '
+        f'stroke-linecap="round" pathLength="1000"/>'
     )
 
-
-def render_stats_card(stats: dict) -> str:
-    rows = [
-        ("Stars", fmt(stats["stars"]), VALUE_COLOR),
-        ("Commits (past year)", fmt(stats["commits"]), VALUE_COLOR),
-        ("Pull requests", fmt(stats["prs"]), VALUE_COLOR),
-        ("Issues", fmt(stats["issues"]), VALUE_COLOR),
-        ("Public repositories", fmt(stats["repos"]), VALUE_COLOR),
-        (
-            "Current streak",
-            f"{stats['streak']} day" + ("" if stats["streak"] == 1 else "s"),
-            STREAK_COLOR,
-        ),
-    ]
-    body = ""
-    for i, (label, value, color) in enumerate(rows):
-        y = 80 + i * 20
-        body += (
-            f'<text x="24" y="{y}" font-size="12" fill="{LABEL_COLOR}">{escape(label)}</text>'
-            f'<text x="426" y="{y}" font-size="12" font-weight="bold" fill="{color}" '
-            f'text-anchor="end">{escape(value)}</text>'
+    if max(counts, default=0) > 0:
+        i_peak = counts.index(max(counts))
+        peak_x = min(max(pts[i_peak][0], px0 + 20), px1 - 20)
+        plot += (
+            f'<text x="{peak_x}" y="{pts[i_peak][1] - 6}" font-size="9" fill="{MUTED}" '
+            f'text-anchor="middle">peak {max(counts)}</text>'
         )
-        if i < len(rows) - 1:
-            body += (
-                f'<rect x="24" y="{y + 7}" width="402" height="1" fill="{HAIRLINE}" '
-                f'shape-rendering="crispEdges"/>'
+
+    for i, (dstr, _) in enumerate(daily):
+        d = date.fromisoformat(dstr)
+        if d.day == 1:
+            mx = min(max(pts[i][0], px0 + 12), px1 - 12)
+            plot += (
+                f'<text x="{mx}" y="200" font-size="9" fill="{MUTED}" '
+                f'text-anchor="middle">{d.strftime("%b").upper()}</text>'
             )
-    return card(450, f"{LOGIN} - GitHub stats", body)
+
+    # Lab panel: weekly commits vs 52-week reference range
+    weekly = stats["weekly"]
+    cur_week = weekly[-1] if weekly else 0
+    completed = weekly[:-1] if len(weekly) > 1 else weekly
+    lo, hi = min(completed, default=0), max(completed, default=0)
+    pos = 0.5 if hi == lo else (min(max(cur_week, lo), hi) - lo) / (hi - lo)
+    tick_x = round(rx0 + (rx1 - rx0 - 3) * pos)
+
+    panel = (
+        f'<text x="{rx0}" y="82" font-size="10" fill="{MUTED}" letter-spacing="1">'
+        f"CONTRIB — THIS WEEK</text>"
+        f'<text x="{rx1}" y="84" font-size="18" font-weight="bold" fill="{VALUE_COLOR}" '
+        f'text-anchor="end">{cur_week}</text>'
+        f'<rect x="{rx0}" y="96" width="{rx1 - rx0}" height="4" fill="{GRID}"/>'
+        f'<rect x="{tick_x}" y="92" width="3" height="12" fill="{TRACE_COLOR}"/>'
+        f'<text x="{rx0}" y="116" font-size="8" fill="{MUTED}">52-WK LOW {lo}</text>'
+        f'<text x="{rx1}" y="116" font-size="8" fill="{MUTED}" text-anchor="end">HIGH {hi}</text>'
+        f'<rect x="{rx0}" y="126" width="{rx1 - rx0}" height="1" fill="{HAIRLINE}"/>'
+        f'<text x="{rx0}" y="145" font-size="10" fill="{MUTED}" letter-spacing="1">'
+        f"CURRENT STREAK</text>"
+        f'<text x="{rx1}" y="145" font-size="13" font-weight="bold" fill="{TRACE_COLOR}" '
+        f'text-anchor="end">{stats["streak"]} day{"" if stats["streak"] == 1 else "s"}</text>'
+        f'<rect x="{rx0}" y="156" width="{rx1 - rx0}" height="1" fill="{HAIRLINE}"/>'
+    )
+    tiles = [
+        ("STARS", fmt(stats["stars"])),
+        ("PRS", fmt(stats["prs"])),
+        ("REPOS", fmt(stats["repos"])),
+        ("COMMITS 1Y", fmt(stats["commits"])),
+    ]
+    for i, (label, value) in enumerate(tiles):
+        tx = rx0 + i * 60
+        panel += (
+            f'<text x="{tx}" y="176" font-size="8" fill="{MUTED}" letter-spacing="1">'
+            f"{escape(label)}</text>"
+            f'<text x="{tx}" y="196" font-size="16" font-weight="bold" '
+            f'fill="{VALUE_COLOR}">{escape(value)}</text>'
+        )
+
+    today = date.today().isoformat()
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+        f'viewBox="0 0 {W} {H}" role="img" aria-label="{LOGIN} GitHub vitals">'
+        f"<title>{LOGIN} — GitHub vitals</title>"
+        f"<style>@media (prefers-reduced-motion: no-preference){{"
+        f".trace{{stroke-dasharray:1000;stroke-dashoffset:1000;"
+        f"animation:ecg 2.4s ease-out 0.3s forwards;}}}}"
+        f"@keyframes ecg{{to{{stroke-dashoffset:0;}}}}</style>"
+        f'<g shape-rendering="crispEdges">'
+        f'<rect width="{W}" height="{H}" fill="{NAVY}"/>'
+        f'<rect x="24" y="48" width="36" height="3" fill="{ACCENT}"/>'
+        f"</g>"
+        f'<g font-family="{FONT}" text-rendering="geometricPrecision">'
+        f'<text x="24" y="38" font-size="14" font-weight="bold" fill="{VALUE_COLOR}" '
+        f'letter-spacing="1">{LOGIN.upper()} — GITHUB VITALS</text>'
+        f'<text x="{rx1}" y="38" font-size="9" fill="{MUTED}" text-anchor="end" '
+        f'letter-spacing="1">90-DAY TELEMETRY · {today}</text>'
+        f'<text x="{px0}" y="64" font-size="9" fill="{MUTED}" letter-spacing="1">'
+        f"DAILY CONTRIBUTIONS</text>"
+        f"{plot}{panel}</g></svg>\n"
+    )
 
 
 def render_langs_card(languages: dict) -> str:
@@ -191,7 +270,43 @@ def render_langs_card(languages: dict) -> str:
             f'<text x="276" y="{y}" font-size="11" font-weight="bold" fill="{VALUE_COLOR}" '
             f'text-anchor="end">{pct:.1f}%</text>'
         )
-    return card(300, "Top languages", body)
+
+    title = "Top languages"
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="195" '
+        f'viewBox="0 0 300 195" role="img" aria-label="{title}">'
+        f"<title>{title}</title>"
+        f'<g shape-rendering="crispEdges">'
+        f'<rect width="300" height="195" fill="{NAVY}"/>'
+        f'<rect x="24" y="50" width="36" height="3" fill="{ACCENT}"/>'
+        f"</g>"
+        f'<g font-family="{FONT}" text-rendering="geometricPrecision">'
+        f'<text x="24" y="40" font-size="14" font-weight="bold" fill="#ffffff" '
+        f'letter-spacing="1">{title.upper()}</text>'
+        f"{body}</g></svg>\n"
+    )
+
+
+def append_history(stats: dict) -> None:
+    DATA.mkdir(exist_ok=True)
+    today = date.today().isoformat()
+
+    stats_csv = DATA / "stats-history.csv"
+    header = "date,stars,commits_past_year,pull_requests,issues,public_repos,streak"
+    lines = stats_csv.read_text().splitlines() if stats_csv.exists() else [header]
+    lines = [l for l in lines if l and not l.startswith(today + ",")]
+    lines.append(
+        f"{today},{stats['stars']},{stats['commits']},{stats['prs']},"
+        f"{stats['issues']},{stats['repos']},{stats['streak']}"
+    )
+    stats_csv.write_text("\n".join(lines) + "\n")
+
+    lang_csv = DATA / "lang-history.csv"
+    lines = lang_csv.read_text().splitlines() if lang_csv.exists() else ["date,language,bytes"]
+    lines = [l for l in lines if l and not l.startswith(today + ",")]
+    for name, size in sorted(stats["languages"].items(), key=lambda kv: -kv[1]):
+        lines.append(f"{today},{name},{size}")
+    lang_csv.write_text("\n".join(lines) + "\n")
 
 
 def main() -> None:
@@ -199,10 +314,11 @@ def main() -> None:
     if not token:
         sys.exit("Set GH_STATS_TOKEN or GITHUB_TOKEN")
     stats = fetch_stats(token)
-    (ASSETS / "github-stats.svg").write_text(render_stats_card(stats))
+    (ASSETS / "github-stats.svg").write_text(render_vitals_card(stats))
     (ASSETS / "top-langs.svg").write_text(render_langs_card(stats["languages"]))
-    print(f"Wrote github-stats.svg and top-langs.svg for {LOGIN}: "
-          f"{ {k: v for k, v in stats.items() if k != 'languages'} }")
+    append_history(stats)
+    print(f"Wrote cards and history for {LOGIN}: "
+          f"{ {k: v for k, v in stats.items() if k not in ('languages', 'daily', 'weekly')} }")
 
 
 if __name__ == "__main__":
