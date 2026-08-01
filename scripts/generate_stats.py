@@ -242,47 +242,73 @@ def render_vitals_card(stats: dict) -> str:
     )
 
 
+OTHER_COLOR = "#3d5a7e"
+
+
 def render_langs_card(languages: dict) -> str:
+    W, H = 750, 220
     total = sum(languages.values()) or 1
     top = sorted(languages.items(), key=lambda kv: kv[1], reverse=True)[: len(PALETTE)]
-    top_total = sum(size for _, size in top) or 1
 
-    bar_x, bar_width, gap = 24, 252, 2
-    drawable = bar_width - gap * (len(top) - 1)
-    body, x = "", bar_x
-    for i, (_, size) in enumerate(top):
-        w = max(3, round(drawable * size / top_total))
-        if i == len(top) - 1:
-            w = max(3, bar_x + bar_width - x)  # absorb rounding drift
-        body += (
-            f'<rect x="{x}" y="64" width="{w}" height="10" fill="{PALETTE[i]}" '
-            f'shape-rendering="crispEdges"/>'
-        )
-        x += w + gap
+    entries = [
+        (name, 100 * size / total, PALETTE[i]) for i, (name, size) in enumerate(top)
+    ]
+    other_pct = 100 - sum(pct for _, pct, _ in entries)
+    if len(languages) > len(top):
+        entries.append(("Other", other_pct, OTHER_COLOR))
 
-    for i, (name, size) in enumerate(top):
-        y = 98 + i * 16
-        pct = 100 * size / total
+    # Waffle: 10x10 grid, one cell = 1%, cells apportioned by largest remainder
+    shares = [pct for _, pct, _ in entries]
+    cells = [int(pct) for pct in shares]
+    for i in sorted(range(len(shares)), key=lambda i: shares[i] - cells[i], reverse=True):
+        if sum(cells) >= 100:
+            break
+        cells[i] += 1
+
+    wx, wy, cell, gap = 24, 72, 11, 2
+    body, k = "", 0
+    for i, count in enumerate(cells):
+        color = entries[i][2]
+        for _ in range(count):
+            if k >= 100:
+                break
+            row, col = divmod(k, 10)
+            body += (
+                f'<rect x="{wx + col * (cell + gap)}" y="{wy + row * (cell + gap)}" '
+                f'width="{cell}" height="{cell}" fill="{color}" shape-rendering="crispEdges"/>'
+            )
+            k += 1
+
+    # Legend: two columns, percentage right-aligned per column
+    cols = [(190, 430), (470, 726)]
+    per_col = (len(entries) + 1) // 2
+    for i, (name, pct, color) in enumerate(entries):
+        cx, cpct = cols[i // per_col]
+        y = 88 + (i % per_col) * 30
+        ink = MUTED if name == "Other" else LABEL_COLOR
         body += (
-            f'<rect x="24" y="{y - 9}" width="9" height="9" fill="{PALETTE[i]}" '
+            f'<rect x="{cx}" y="{y - 10}" width="10" height="10" fill="{color}" '
             f'shape-rendering="crispEdges"/>'
-            f'<text x="39" y="{y}" font-size="11" fill="{LABEL_COLOR}">{escape(name)}</text>'
-            f'<text x="276" y="{y}" font-size="11" font-weight="bold" fill="{VALUE_COLOR}" '
+            f'<text x="{cx + 17}" y="{y}" font-size="11" fill="{ink}">{escape(name)}</text>'
+            f'<text x="{cpct}" y="{y}" font-size="12" font-weight="bold" fill="{VALUE_COLOR}" '
             f'text-anchor="end">{pct:.1f}%</text>'
         )
 
-    title = "Top languages"
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="195" '
-        f'viewBox="0 0 300 195" role="img" aria-label="{title}">'
-        f"<title>{title}</title>"
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+        f'viewBox="0 0 {W} {H}" role="img" aria-label="Top languages">'
+        f"<title>Top languages</title>"
         f'<g shape-rendering="crispEdges">'
-        f'<rect width="300" height="195" fill="{NAVY}"/>'
-        f'<rect x="24" y="50" width="36" height="3" fill="{ACCENT}"/>'
+        f'<rect width="{W}" height="{H}" fill="{NAVY}"/>'
+        f'<rect x="24" y="48" width="36" height="3" fill="{ACCENT}"/>'
         f"</g>"
         f'<g font-family="{FONT}" text-rendering="geometricPrecision">'
-        f'<text x="24" y="40" font-size="14" font-weight="bold" fill="#ffffff" '
-        f'letter-spacing="1">{title.upper()}</text>'
+        f'<text x="24" y="38" font-size="14" font-weight="bold" fill="{VALUE_COLOR}" '
+        f'letter-spacing="1">TOP LANGUAGES</text>'
+        f'<text x="726" y="38" font-size="9" fill="{MUTED}" text-anchor="end" '
+        f'letter-spacing="1">BY CODE BYTES · PUBLIC REPOS</text>'
+        f'<text x="24" y="64" font-size="9" fill="{MUTED}" letter-spacing="1">'
+        f"SHARE OF CODE — 1 CELL = 1%</text>"
         f"{body}</g></svg>\n"
     )
 
