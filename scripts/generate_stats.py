@@ -250,6 +250,7 @@ def render_vitals_card(stats: dict) -> str:
 
 
 OTHER_COLOR = "#3d5a7e"
+TREND_MIN_DAYS = 60  # render the language-trend card once history spans this many days
 
 
 def render_langs_card(stats: dict) -> str:
@@ -367,6 +368,152 @@ def render_langs_card(stats: dict) -> str:
     )
 
 
+def load_lang_history() -> dict[str, dict[str, int]]:
+    path = DATA / "lang-history.csv"
+    if not path.exists():
+        return {}
+    hist: dict[str, dict[str, int]] = {}
+    for line in path.read_text().splitlines()[1:]:
+        parts = line.split(",")
+        if len(parts) == 3:
+            hist.setdefault(parts[0], {})[parts[1]] = int(parts[2])
+    return hist
+
+
+def render_lang_trend(hist: dict) -> str | None:
+    dates = sorted(hist)
+    if len(dates) < 2:
+        return None
+    span = (date.fromisoformat(dates[-1]) - date.fromisoformat(dates[0])).days
+    if span < TREND_MIN_DAYS:
+        return None
+    if len(dates) > 120:
+        idx = sorted({round(i * (len(dates) - 1) / 119) for i in range(120)})
+        dates = [dates[i] for i in idx]
+
+    shares = {}
+    for d in dates:
+        tot = sum(hist[d].values()) or 1
+        shares[d] = {l: 100 * s / tot for l, s in hist[d].items()}
+
+    means: dict[str, float] = {}
+    for d in dates:
+        for lang, pct in shares[d].items():
+            means[lang] = means.get(lang, 0) + pct
+    ranked = sorted(means, key=lambda l: means[l], reverse=True)
+    top = ranked[: len(PALETTE)]
+    series = top + (["Other"] if len(ranked) > len(top) else [])
+    colors = {lang: PALETTE[i] for i, lang in enumerate(top)}
+    colors["Other"] = OTHER_COLOR
+
+    W, H = 750, 220
+    px0, px1, py0, py1 = 52, 596, 72, 190
+    n = len(dates)
+
+    def x_at(i: int) -> float:
+        return round(px0 + (px1 - px0) * i / (n - 1), 1)
+
+    def y_at(v: float) -> float:
+        return round(py1 - (py1 - py0) * v / 100, 1)
+
+    # Stacked shares, largest series at the bottom
+    stacks = []  # per series: list of (lower, upper) per date
+    cum = [0.0] * n
+    for lang in series:
+        vals = []
+        for i, d in enumerate(dates):
+            if lang == "Other":
+                v = max(0.0, 100 - sum(shares[d].get(l, 0) for l in top))
+            else:
+                v = shares[d].get(lang, 0)
+            vals.append((cum[i], cum[i] + v))
+            cum[i] += v
+        stacks.append(vals)
+
+    body = ""
+    for frac in (25, 50, 75):
+        body += (
+            f'<rect x="{px0}" y="{y_at(frac)}" width="{px1 - px0}" height="1" '
+            f'fill="{GRID}"/>'
+        )
+    for v in (0, 50, 100):
+        body += (
+            f'<text x="{px0 - 8}" y="{y_at(v) + 3}" font-size="8" fill="{MUTED}" '
+            f'text-anchor="end">{v}%</text>'
+        )
+
+    for lang, vals in zip(series, stacks):
+        upper = [f"{x_at(i)},{y_at(hi)}" for i, (_, hi) in enumerate(vals)]
+        lower = [f"{x_at(i)},{y_at(lo)}" for i, (lo, _) in reversed(list(enumerate(vals)))]
+        body += (
+            f'<polygon points="{" ".join(upper + lower)}" fill="{colors[lang]}" '
+            f'stroke="{NAVY}" stroke-width="1.5" stroke-linejoin="round"/>'
+        )
+
+    prev_month = None
+    for i, d in enumerate(dates):
+        month = d[:7]
+        if prev_month and month != prev_month:
+            body += (
+                f'<rect x="{x_at(i)}" y="{py0}" width="1" height="{py1 - py0}" '
+                f'fill="{GRID}"/>'
+                f'<text x="{x_at(i)}" y="{py1 + 14}" font-size="9" fill="{MUTED}" '
+                f'text-anchor="middle">'
+                f"{date.fromisoformat(d).strftime('%b').upper()}</text>"
+            )
+        prev_month = month
+    body += f'<rect x="{px0}" y="{py1}" width="{px1 - px0}" height="1" fill="{HAIRLINE}"/>'
+
+    # Direct labels at the right edge, nudged apart to avoid collisions
+    labels = []
+    for lang, vals in zip(series, stacks):
+        lo, hi = vals[-1]
+        if hi - lo >= 3:
+            labels.append([(y_at(lo) + y_at(hi)) / 2 + 3, lang, hi - lo])
+    labels.sort()
+    for j in range(1, len(labels)):
+        labels[j][0] = max(labels[j][0], labels[j - 1][0] + 13)
+    for ly, lang, pct in labels:
+        ly = min(ly, py1 + 4)
+        ink = MUTED if lang == "Other" else LABEL_COLOR
+        body += (
+            f'<rect x="604" y="{ly - 8}" width="8" height="8" fill="{colors[lang]}" '
+            f'shape-rendering="crispEdges"/>'
+            f'<text x="617" y="{ly}" font-size="10" fill="{ink}">{escape(lang)} '
+            f'<tspan font-weight="bold" fill="{VALUE_COLOR}">{pct:.0f}%</tspan></text>'
+        )
+
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+        f'viewBox="0 0 {W} {H}" role="img" aria-label="Language trends">'
+        f"<title>Language trends</title>"
+        f'<g shape-rendering="crispEdges">'
+        f'<rect width="{W}" height="{H}" fill="{NAVY}"/>'
+        f'<rect x="24" y="48" width="36" height="3" fill="{ACCENT}"/>'
+        f"</g>"
+        f'<g font-family="{FONT}" text-rendering="geometricPrecision">'
+        f'<text x="24" y="38" font-size="14" font-weight="bold" fill="{VALUE_COLOR}" '
+        f'letter-spacing="1">LANGUAGE TRENDS</text>'
+        f'<text x="726" y="38" font-size="9" fill="{MUTED}" text-anchor="end" '
+        f'letter-spacing="1">SHARE OF BYTES · SINCE {dates[0]} · PUBLIC</text>'
+        f'<text x="{px0}" y="64" font-size="9" fill="{MUTED}" letter-spacing="1">'
+        f"STACKED COMPOSITION — DAILY SNAPSHOTS</text>"
+        f"{body}</g></svg>\n"
+    )
+
+
+def ensure_readme_embed() -> None:
+    readme = ASSETS.parent / "README.md"
+    txt = readme.read_text()
+    if "assets/lang-trend.svg" in txt:
+        return
+    anchor = "![Top Languages](assets/top-langs.svg)"
+    if anchor in txt:
+        readme.write_text(
+            txt.replace(anchor, anchor + "\n\n![Language Trends](assets/lang-trend.svg)")
+        )
+
+
 def append_history(stats: dict) -> None:
     DATA.mkdir(exist_ok=True)
     today = date.today().isoformat()
@@ -394,9 +541,13 @@ def main() -> None:
     if not token:
         sys.exit("Set GH_STATS_TOKEN or GITHUB_TOKEN")
     stats = fetch_stats(token)
+    append_history(stats)
     (ASSETS / "github-stats.svg").write_text(render_vitals_card(stats))
     (ASSETS / "top-langs.svg").write_text(render_langs_card(stats))
-    append_history(stats)
+    trend = render_lang_trend(load_lang_history())
+    if trend:
+        (ASSETS / "lang-trend.svg").write_text(trend)
+        ensure_readme_embed()
     print(f"Wrote cards and history for {LOGIN}: "
           f"{ {k: v for k, v in stats.items() if k not in ('languages', 'daily', 'weekly')} }")
 
