@@ -31,6 +31,8 @@ I'm a physician and clinical data analyst in Thailand working across travel medi
 
 ![Top Languages](assets/top-langs.svg)
 
+![Language Trends](assets/lang-trend.svg)
+
 ## Connect
 
 [Portfolio](https://vpoonyak.github.io/) · [LinkedIn](https://www.linkedin.com/in/vitchakorn) · [Hugging Face](https://huggingface.co/vpoonyak) · [Tableau](https://public.tableau.com/app/profile/vitchakorn.poonyakanok) · [Email](mailto:vk.poonyakanok@gmail.com)
