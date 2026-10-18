@@ -2,7 +2,7 @@
 
 **Physician building clinical AI, travel medicine tools, and public health data systems.**
 
-![Profile Views](https://komarev.com/ghpvc/?username=vpoonyak&label=Profile%20Views&style=flat-square&color=0056b3)
+![Profile Views](https://profile-views.vk-poonyakanok.workers.dev/badge.svg)
 
 I'm a physician and clinical data analyst in Thailand working across travel medicine, public health informatics, clinical AI, and health data governance.
 

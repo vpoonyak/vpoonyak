@@ -5,18 +5,20 @@ Fetches stats from the GitHub GraphQL API and renders a "GitHub vitals"
 monitor card (ECG-style contribution trace + lab-panel stats) and a top
 languages card, both in the flat navy style of the hand-made badges in
 assets/. Also appends a daily snapshot to data/*.csv for future trend
-charts. Stdlib only.
+charts. Profile-view history comes from the counter Worker in counter/
+and is mirrored to data/views-history.csv. Stdlib only.
 """
 
 import json
 import os
 import sys
 import urllib.request
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 LOGIN = os.environ.get("GH_STATS_LOGIN", "vpoonyak")
+VIEWS_URL = os.environ.get("VIEWS_URL", "")  # counter Worker base URL; see counter/
 NAVY = "#0b1f3a"
 ACCENT = "#0056b3"
 LABEL_COLOR = "#a9bcd4"
@@ -502,16 +504,128 @@ def render_lang_trend(hist: dict) -> str | None:
     )
 
 
-def ensure_readme_embed() -> None:
+def ensure_readme_embed(asset: str, alt: str, anchor: str) -> None:
     readme = ASSETS.parent / "README.md"
     txt = readme.read_text()
-    if "assets/lang-trend.svg" in txt:
+    if f"assets/{asset}" in txt:
         return
-    anchor = "![Top Languages](assets/top-langs.svg)"
     if anchor in txt:
-        readme.write_text(
-            txt.replace(anchor, anchor + "\n\n![Language Trends](assets/lang-trend.svg)")
+        readme.write_text(txt.replace(anchor, anchor + f"\n\n![{alt}](assets/{asset})"))
+
+
+VIEWS_MIN_DAYS = 14  # render the profile-views card once history spans this many days
+BANGKOK = timezone(timedelta(hours=7))  # the Worker buckets days in Bangkok time
+
+
+def fetch_views() -> dict | None:
+    if not VIEWS_URL:
+        return None
+    try:
+        req = urllib.request.Request(
+            VIEWS_URL.rstrip("/") + "/history.json", headers={"User-Agent": LOGIN}
         )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except Exception as exc:  # the counter being down must not block the other cards
+        print(f"Skipping profile views: {exc}", file=sys.stderr)
+        return None
+
+
+def save_views_history(views: dict) -> None:
+    lines = ["date,views"] + [f"{d['date']},{d['views']}" for d in views["daily"]]
+    (DATA / "views-history.csv").write_text("\n".join(lines) + "\n")
+
+
+def render_views_card(views: dict) -> str | None:
+    by_date = {d["date"]: d["views"] for d in views["daily"]}
+    if not by_date:
+        return None
+    # Completed days only: today (Bangkok) is still accumulating
+    last = datetime.now(BANGKOK).date() - timedelta(days=1)
+    first = date.fromisoformat(min(by_date))
+    if (last - first).days < VIEWS_MIN_DAYS:
+        return None
+    start = max(first, last - timedelta(days=89))
+    days = [start + timedelta(days=i) for i in range((last - start).days + 1)]
+    counts = [by_date.get(d.isoformat(), 0) for d in days]
+
+    W, H = 750, 220
+    px0, px1, py0, py1 = 24, 452, 72, 184
+    rx0, rx1 = 492, 726
+    vmax = max(counts + [1])
+    n = len(days)
+    slot = (px1 - px0) / n
+    bar = max(slot - 1, 1)
+
+    plot = ""
+    for frac in (1 / 3, 2 / 3):
+        gy = round(py0 + (py1 - py0) * frac)
+        plot += f'<rect x="{px0}" y="{gy}" width="{px1 - px0}" height="1" fill="{GRID}"/>'
+    for i, c in enumerate(counts):
+        if c:
+            h = (py1 - py0 - 8) * c / vmax
+            plot += (
+                f'<rect x="{px0 + i * slot:.1f}" y="{py1 - h:.1f}" width="{bar:.1f}" '
+                f'height="{h:.1f}" fill="{TRACE_COLOR}"/>'
+            )
+    plot += f'<rect x="{px0}" y="{py1}" width="{px1 - px0}" height="1" fill="{HAIRLINE}"/>'
+
+    if max(counts) > 0:
+        i_peak = counts.index(max(counts))
+        peak_x = min(max(px0 + (i_peak + 0.5) * slot, px0 + 20), px1 - 20)
+        peak_y = py1 - (py1 - py0 - 8) - 6
+        plot += (
+            f'<text x="{peak_x:.1f}" y="{peak_y:.1f}" font-size="9" fill="{MUTED}" '
+            f'text-anchor="middle">peak {max(counts)}</text>'
+        )
+    for i, d in enumerate(days):
+        if d.day == 1:
+            mx = min(max(px0 + (i + 0.5) * slot, px0 + 12), px1 - 12)
+            plot += (
+                f'<text x="{mx:.1f}" y="200" font-size="9" fill="{MUTED}" '
+                f'text-anchor="middle">{d.strftime("%b").upper()}</text>'
+            )
+
+    panel = (
+        f'<text x="{rx0}" y="82" font-size="10" fill="{MUTED}" letter-spacing="1">'
+        f"TOTAL VIEWS</text>"
+        f'<text x="{rx1}" y="86" font-size="22" font-weight="bold" fill="{VALUE_COLOR}" '
+        f'text-anchor="end">{fmt(views["total"])}</text>'
+        f'<rect x="{rx0}" y="100" width="{rx1 - rx0}" height="1" fill="{HAIRLINE}"/>'
+    )
+    tiles = [
+        ("LAST 7D", fmt(sum(counts[-7:]))),
+        ("LAST 30D", fmt(sum(counts[-30:]))),
+        ("DAILY AVG", f"{sum(counts[-30:]) / min(n, 30):.1f}"),
+        ("BEST DAY", fmt(max(by_date.values()))),
+    ]
+    for i, (label, value) in enumerate(tiles):
+        tx = rx0 + (i % 2) * 120
+        ty = 124 + (i // 2) * 44
+        panel += (
+            f'<text x="{tx}" y="{ty}" font-size="8" fill="{MUTED}" letter-spacing="1">'
+            f"{label}</text>"
+            f'<text x="{tx}" y="{ty + 20}" font-size="16" font-weight="bold" '
+            f'fill="{VALUE_COLOR}">{escape(value)}</text>'
+        )
+
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+        f'viewBox="0 0 {W} {H}" role="img" aria-label="Profile views">'
+        f"<title>Profile views</title>"
+        f'<g shape-rendering="crispEdges">'
+        f'<rect width="{W}" height="{H}" fill="{NAVY}"/>'
+        f'<rect x="24" y="48" width="36" height="3" fill="{ACCENT}"/>'
+        f"</g>"
+        f'<g font-family="{FONT}" text-rendering="geometricPrecision">'
+        f'<text x="24" y="38" font-size="14" font-weight="bold" fill="{VALUE_COLOR}" '
+        f'letter-spacing="1">PROFILE VIEWS</text>'
+        f'<text x="{rx1}" y="38" font-size="9" fill="{MUTED}" text-anchor="end" '
+        f'letter-spacing="1">{n}-DAY TRAFFIC · THROUGH {last.isoformat()}</text>'
+        f'<text x="{px0}" y="64" font-size="9" fill="{MUTED}" letter-spacing="1">'
+        f"DAILY VIEWS</text>"
+        f"{plot}{panel}</g></svg>\n"
+    )
 
 
 def append_history(stats: dict) -> None:
@@ -547,7 +661,19 @@ def main() -> None:
     trend = render_lang_trend(load_lang_history())
     if trend:
         (ASSETS / "lang-trend.svg").write_text(trend)
-        ensure_readme_embed()
+        ensure_readme_embed(
+            "lang-trend.svg", "Language Trends", "![Top Languages](assets/top-langs.svg)"
+        )
+    views = fetch_views()
+    if views:
+        save_views_history(views)
+        card = render_views_card(views)
+        if card:
+            (ASSETS / "views.svg").write_text(card)
+            ensure_readme_embed(
+                "views.svg", "Profile views",
+                "![Vitchakorn Poonyakanok's GitHub vitals](assets/github-stats.svg)",
+            )
     print(f"Wrote cards and history for {LOGIN}: "
           f"{ {k: v for k, v in stats.items() if k not in ('languages', 'daily', 'weekly')} }")
 

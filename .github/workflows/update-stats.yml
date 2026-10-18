@@ -29,6 +29,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_STATS_TOKEN: ${{ secrets.GH_STATS_TOKEN }}
+          VIEWS_URL: https://profile-views.vk-poonyakanok.workers.dev
         run: python scripts/generate_stats.py
 
       - name: Commit updated cards
